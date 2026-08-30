@@ -4,20 +4,19 @@ import appeng.api.config.Actionable;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
-import appeng.me.storage.NetworkStorage;
+import appeng.api.storage.MEStorage;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.material.EmptyFluid;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
-    NetworkStorage storage;
+    MEStorage storage;
 
-    public MEProxyInventoryHandler(NetworkStorage storage) {
+    public MEProxyInventoryHandler(MEStorage storage) {
         this.storage = storage;
     }
 
@@ -61,11 +60,10 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
     @NotNull
     @Override
     public FluidStack drain(FluidStack resource, FluidAction action) {
-        FluidStack copied = resource.copy();
-
-        if (copied.getFluid() instanceof EmptyFluid)
+        if (resource.isEmpty())
             return FluidStack.EMPTY;
 
+        FluidStack copied = resource.copy();
         copied.setAmount(((int) storage.extract(AEFluidKey.of(resource), resource.getAmount(), action == FluidAction.EXECUTE ? Actionable.MODULATE : Actionable.SIMULATE, IActionSource.empty())));
         return copied.getAmount() > 0 ? copied : FluidStack.EMPTY;
     }
@@ -78,7 +76,7 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
 
     @Override
     public int getSlots() {
-        return getItemKeys().size() + 16; // Allocate 16 slots for input
+        return getItemKeys().size() + 16;
     }
 
     @NotNull
@@ -97,7 +95,7 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
 
         copied.setCount(copied.getCount() - (int) storage.insert(AEItemKey.of(stack), stack.getCount(), simulate ? Actionable.SIMULATE : Actionable.MODULATE, IActionSource.empty()));
 
-        return copied;
+        return copied.getCount() > 0 ? copied : ItemStack.EMPTY;
     }
 
     @NotNull
