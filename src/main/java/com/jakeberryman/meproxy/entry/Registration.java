@@ -1,10 +1,13 @@
 package com.jakeberryman.meproxy.entry;
 
+import appeng.api.AECapabilities;
 import com.jakeberryman.meproxy.MEProxy;
+import com.jakeberryman.meproxy.content.bridge.NetworkBridgeBlock;
+import com.jakeberryman.meproxy.content.bridge.NetworkBridgeBlockEntity;
 import com.jakeberryman.meproxy.content.meProxy.MEProxyBlock;
 import com.jakeberryman.meproxy.content.meProxy.MEProxyBlockEntity;
 import com.jakeberryman.meproxy.content.meProxy.MEProxyBlockItem;
-import com.jakeberryman.meproxy.content.meProxy.MEProxyInventoryHandler;
+import com.refinedmods.refinedstorage.neoforge.api.RefinedStorageNeoForgeApi;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -37,11 +40,25 @@ public class Registration {
                     ME_PROXY_BLOCK.get()
             ).build(null));
 
+    public static final DeferredBlock<NetworkBridgeBlock> NETWORK_BRIDGE_BLOCK = BLOCKS.register("network_bridge", NetworkBridgeBlock::new);
+
+    public static final DeferredItem<MEProxyBlockItem> NETWORK_BRIDGE_ITEM = ITEMS.register("network_bridge",
+            () -> new MEProxyBlockItem(NETWORK_BRIDGE_BLOCK.get(), new Item.Properties()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkBridgeBlockEntity>> NETWORK_BRIDGE_BLOCK_ENTITY = BLOCK_ENTITIES.register("network_bridge",
+            () -> BlockEntityType.Builder.of(
+                    NetworkBridgeBlockEntity::new,
+                    NETWORK_BRIDGE_BLOCK.get()
+            ).build(null));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = TABS.register("meproxy",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.meproxy"))
                     .icon(() -> new ItemStack(ME_PROXY_ITEM.get()))
-                    .displayItems((parameters, output) -> output.accept(ME_PROXY_ITEM.get()))
+                    .displayItems((parameters, output) -> {
+                        output.accept(ME_PROXY_ITEM.get());
+                        output.accept(NETWORK_BRIDGE_ITEM.get());
+                    })
                     .build());
 
     public static void register(IEventBus modEventBus) {
@@ -63,5 +80,10 @@ public class Registration {
                 (blockEntity, side) -> blockEntity.getHandler());
         event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, ME_PROXY_BLOCK_ENTITY.get(),
                 (blockEntity, side) -> blockEntity.getHandler());
+
+        event.registerBlockEntity(AECapabilities.IN_WORLD_GRID_NODE_HOST, NETWORK_BRIDGE_BLOCK_ENTITY.get(),
+                (blockEntity, context) -> blockEntity);
+        event.registerBlockEntity(RefinedStorageNeoForgeApi.INSTANCE.getNetworkNodeContainerProviderCapability(), NETWORK_BRIDGE_BLOCK_ENTITY.get(),
+                (blockEntity, side) -> blockEntity.getContainerProvider());
     }
 }

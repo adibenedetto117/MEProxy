@@ -39,10 +39,15 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     mavenCentral()
+    maven {
+        name = 'CreeperHost'
+        url = 'https://maven.creeperhost.net'
+    }
 }
 
 dependencies {
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
+    implementation "com.refinedmods.refinedstorage:refinedstorage-neoforge:${rs_version}"
 }
 
 tasks.named('processResources', ProcessResources).configure {

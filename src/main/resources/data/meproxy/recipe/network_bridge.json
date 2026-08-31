@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "aba",
+    "cec",
+    "aba"
+  ],
+  "key": {
+    "a": {
+      "item": "refinedstorage:quartz_enriched_iron"
+    },
+    "b": {
+      "item": "ae2:fluix_crystal"
+    },
+    "c": {
+      "item": "refinedstorage:cable"
+    },
+    "e": {
+      "item": "meproxy:me_proxy"
+    }
+  },
+  "result": {
+    "id": "meproxy:network_bridge",
+    "count": 1
+  }
+}

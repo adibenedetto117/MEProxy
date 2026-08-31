@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "meproxy:block/network_bridge"
+    }
+  }
+}

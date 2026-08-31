@@ -21,6 +21,6 @@ public class MEProxyBlockItem extends BlockItem {
     public void appendHoverText(@NotNull ItemStack stack, @NotNull Item.TooltipContext context, @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
 
-        tooltip.add(Component.translatable("tooltip.meproxy.me_proxy").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
+        tooltip.add(Component.translatable(getDescriptionId().replaceFirst("^block\\.", "tooltip.")).setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
     }
 }

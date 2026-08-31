@@ -1,5 +1,7 @@
 {
   "block.meproxy.me_proxy": "ME Proxy",
+  "block.meproxy.network_bridge": "ME/RS Network Bridge",
   "itemGroup.meproxy": "ME Proxy",
-  "tooltip.meproxy.me_proxy": "A proxy to access §fME §rnetwork's storage"
+  "tooltip.meproxy.me_proxy": "A proxy to access \u00a7fME \u00a7rnetwork's storage",
+  "tooltip.meproxy.network_bridge": "Bridges an ME network and a Refined Storage network so both see and use each other's storage"
 }
