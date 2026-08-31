@@ -10,6 +10,7 @@ import com.refinedmods.refinedstorage.api.resource.ResourceAmount;
 import com.refinedmods.refinedstorage.api.resource.ResourceKey;
 import com.refinedmods.refinedstorage.api.storage.Actor;
 import com.refinedmods.refinedstorage.api.storage.external.ExternalStorageProvider;
+import com.refinedmods.refinedstorage.api.storage.root.RootStorage;
 
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
@@ -49,6 +50,27 @@ public class AE2ExternalStorageProvider implements ExternalStorageProvider {
             }
             KeyCounter counter = new KeyCounter();
             storage.getAvailableStacks(counter);
+            for (NetworkBridgeBlockEntity bridge : blockEntity.getBridgesOnSameAe2Grid()) {
+                RootStorage root = bridge.getRsRootStorage();
+                if (root == null) {
+                    continue;
+                }
+                for (ResourceAmount resourceAmount : root.getAll()) {
+                    AEKey key = BridgeResources.toAEKey(resourceAmount.resource());
+                    if (key != null) {
+                        counter.add(key, -resourceAmount.amount());
+                    }
+                }
+                for (var bridgeCache : bridge.getAllBridgeCachesOnRsNetwork()) {
+                    for (ResourceAmount resourceAmount : bridgeCache) {
+                        AEKey key = BridgeResources.toAEKey(resourceAmount.resource());
+                        if (key != null) {
+                            counter.add(key, resourceAmount.amount());
+                        }
+                    }
+                }
+            }
+            counter.removeZeros();
             List<ResourceAmount> resources = new ArrayList<>(counter.size());
             for (var entry : counter) {
                 long amount = entry.getLongValue();
