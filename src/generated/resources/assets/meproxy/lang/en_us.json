@@ -3,5 +3,7 @@
   "block.meproxy.network_bridge": "ME/RS Network Bridge",
   "itemGroup.meproxy": "ME Proxy",
   "tooltip.meproxy.me_proxy": "A proxy to access \u00a7fME \u00a7rnetwork's storage",
-  "tooltip.meproxy.network_bridge": "Bridges an ME network and a Refined Storage network so both see and use each other's storage"
+  "tooltip.meproxy.me_proxy.usage": "Exposes the whole ME network as a plain inventory for pipes, Create, or an RS External Storage",
+  "tooltip.meproxy.network_bridge": "Bridges an ME network and a Refined Storage network",
+  "tooltip.meproxy.network_bridge.usage": "Place touching an ME cable and an RS cable. Both networks then see, store, and use each other's items and fluids. Autocrafting stays separate. Use one bridge per network pair."
 }

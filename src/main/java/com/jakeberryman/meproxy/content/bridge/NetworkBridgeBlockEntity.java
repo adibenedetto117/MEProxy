@@ -25,11 +25,17 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBlockEntity<ExternalStorageNetworkNode>
         implements IInWorldGridNodeHost, IStorageProvider {
+
+    private static final Set<NetworkBridgeBlockEntity> BRIDGES = Collections.newSetFromMap(new WeakHashMap<>());
 
     private static final long RS_ENERGY_USAGE = 6L;
     private static final double AE2_IDLE_POWER = 5.0;
@@ -67,6 +73,9 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         mainNode.addService(IStorageProvider.class, this);
         mainNetworkNode.initialize(new AE2ExternalStorageProvider(this));
         mainNetworkNode.getStorageConfiguration().setInsertPriority(BRIDGE_PRIORITY);
+        synchronized (BRIDGES) {
+            BRIDGES.add(this);
+        }
     }
 
     @Override
@@ -122,6 +131,22 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         return storage == null ? List.of() : storage.getAll();
     }
 
+    List<Collection<ResourceAmount>> getAllBridgeCachesOnRsNetwork() {
+        Network network = mainNetworkNode.getNetwork();
+        if (network == null) {
+            return List.of();
+        }
+        List<Collection<ResourceAmount>> caches = new ArrayList<>();
+        synchronized (BRIDGES) {
+            for (NetworkBridgeBlockEntity bridge : BRIDGES) {
+                if (bridge.mainNetworkNode.getNetwork() == network) {
+                    caches.add(bridge.getBridgeSourceContents());
+                }
+            }
+        }
+        return caches;
+    }
+
     @Nullable
     MEStorage getAe2Storage() {
         IGrid grid = mainNode.getGrid();
@@ -158,6 +183,9 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         super.setRemoved();
         detachRsListener();
         mainNode.destroy();
+        synchronized (BRIDGES) {
+            BRIDGES.remove(this);
+        }
     }
 
     @Override

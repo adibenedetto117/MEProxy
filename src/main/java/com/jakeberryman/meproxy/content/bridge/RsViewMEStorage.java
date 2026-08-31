@@ -37,10 +37,12 @@ public class RsViewMEStorage implements MEStorage {
                     out.add(key, resourceAmount.amount());
                 }
             }
-            for (ResourceAmount resourceAmount : blockEntity.getBridgeSourceContents()) {
-                AEKey key = BridgeResources.toAEKey(resourceAmount.resource());
-                if (key != null) {
-                    out.add(key, -resourceAmount.amount());
+            for (var bridgeCache : blockEntity.getAllBridgeCachesOnRsNetwork()) {
+                for (ResourceAmount resourceAmount : bridgeCache) {
+                    AEKey key = BridgeResources.toAEKey(resourceAmount.resource());
+                    if (key != null) {
+                        out.add(key, -resourceAmount.amount());
+                    }
                 }
             }
             out.removeZeros();

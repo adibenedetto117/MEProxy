@@ -5,8 +5,10 @@ import appeng.api.networking.IGrid;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
+import com.jakeberryman.meproxy.content.bridge.BridgeGuard;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
@@ -69,23 +71,37 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
         fluidKeys = List.of();
     }
 
-    private int cachedAmount(appeng.api.stacks.AEKey key) {
+    private int cachedAmount(AEKey key) {
         return (int) Math.min(cachedStacks.get(key), Integer.MAX_VALUE);
     }
 
     @Override
     public int getTanks() {
-        return refreshCache() ? fluidKeys.size() : 0;
+        if (!BridgeGuard.enter()) {
+            return 0;
+        }
+        try {
+            return refreshCache() ? fluidKeys.size() : 0;
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @NotNull
     @Override
     public FluidStack getFluidInTank(int tank) {
-        if (!refreshCache() || tank >= fluidKeys.size())
+        if (!BridgeGuard.enter()) {
             return FluidStack.EMPTY;
-
-        AEFluidKey key = fluidKeys.get(tank);
-        return key.toStack(cachedAmount(key));
+        }
+        try {
+            if (!refreshCache() || tank >= fluidKeys.size()) {
+                return FluidStack.EMPTY;
+            }
+            AEFluidKey key = fluidKeys.get(tank);
+            return key.toStack(cachedAmount(key));
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @Override
@@ -95,82 +111,150 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
 
     @Override
     public boolean isFluidValid(int tank, @NotNull FluidStack stack) {
-        MEStorage storage = storage();
-        if (storage == null || stack.isEmpty())
+        if (!BridgeGuard.enter()) {
             return false;
-
-        return storage.insert(AEFluidKey.of(stack), stack.getAmount(), Actionable.SIMULATE, IActionSource.empty()) > 0;
+        }
+        try {
+            MEStorage storage = storage();
+            if (storage == null || stack.isEmpty()) {
+                return false;
+            }
+            return storage.insert(AEFluidKey.of(stack), stack.getAmount(), Actionable.SIMULATE, IActionSource.empty()) > 0;
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @Override
     public int fill(FluidStack resource, FluidAction action) {
-        MEStorage storage = storage();
-        if (storage == null || resource.isEmpty())
+        if (!BridgeGuard.enter()) {
             return 0;
-
-        int filled = (int) storage.insert(AEFluidKey.of(resource), resource.getAmount(), action == FluidAction.EXECUTE ? Actionable.MODULATE : Actionable.SIMULATE, IActionSource.empty());
-        if (filled > 0 && action == FluidAction.EXECUTE)
-            invalidateCache();
-        return filled;
+        }
+        try {
+            MEStorage storage = storage();
+            if (storage == null || resource.isEmpty()) {
+                return 0;
+            }
+            int filled = (int) storage.insert(AEFluidKey.of(resource), resource.getAmount(), action == FluidAction.EXECUTE ? Actionable.MODULATE : Actionable.SIMULATE, IActionSource.empty());
+            if (filled > 0 && action == FluidAction.EXECUTE) {
+                invalidateCache();
+            }
+            return filled;
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @NotNull
     @Override
     public FluidStack drain(FluidStack resource, FluidAction action) {
-        MEStorage storage = storage();
-        if (storage == null || resource.isEmpty())
+        if (!BridgeGuard.enter()) {
             return FluidStack.EMPTY;
+        }
+        try {
+            return drainInternal(resource, action);
+        } finally {
+            BridgeGuard.exit();
+        }
+    }
+
+    @NotNull
+    private FluidStack drainInternal(FluidStack resource, FluidAction action) {
+        MEStorage storage = storage();
+        if (storage == null || resource.isEmpty()) {
+            return FluidStack.EMPTY;
+        }
 
         FluidStack copied = resource.copy();
         copied.setAmount(((int) storage.extract(AEFluidKey.of(resource), resource.getAmount(), action == FluidAction.EXECUTE ? Actionable.MODULATE : Actionable.SIMULATE, IActionSource.empty())));
-        if (copied.getAmount() > 0 && action == FluidAction.EXECUTE)
+        if (copied.getAmount() > 0 && action == FluidAction.EXECUTE) {
             invalidateCache();
+        }
         return copied.getAmount() > 0 ? copied : FluidStack.EMPTY;
     }
 
     @NotNull
     @Override
     public FluidStack drain(int maxDrain, FluidAction action) {
-        FluidStack first = getFluidInTank(0);
-        if (first.isEmpty())
+        if (!BridgeGuard.enter()) {
             return FluidStack.EMPTY;
-
-        FluidStack request = first.copy();
-        request.setAmount(Math.min(maxDrain, first.getAmount()));
-        return drain(request, action);
+        }
+        try {
+            if (!refreshCache() || fluidKeys.isEmpty()) {
+                return FluidStack.EMPTY;
+            }
+            AEFluidKey key = fluidKeys.get(0);
+            FluidStack request = key.toStack(Math.min(maxDrain, cachedAmount(key)));
+            if (request.isEmpty()) {
+                return FluidStack.EMPTY;
+            }
+            return drainInternal(request, action);
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @Override
     public int getSlots() {
-        return refreshCache() ? itemKeys.size() + EXTRA_INSERT_SLOTS : 0;
+        if (!BridgeGuard.enter()) {
+            return 0;
+        }
+        try {
+            return refreshCache() ? itemKeys.size() + EXTRA_INSERT_SLOTS : 0;
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @NotNull
     @Override
     public ItemStack getStackInSlot(int slot) {
-        if (!refreshCache() || slot >= itemKeys.size())
+        if (!BridgeGuard.enter()) {
             return ItemStack.EMPTY;
-
-        AEItemKey key = itemKeys.get(slot);
-        return key.toStack(cachedAmount(key));
+        }
+        try {
+            if (!refreshCache() || slot >= itemKeys.size()) {
+                return ItemStack.EMPTY;
+            }
+            AEItemKey key = itemKeys.get(slot);
+            return key.toStack(cachedAmount(key));
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @NotNull
     @Override
     public ItemStack insertItem(int slot, @NotNull ItemStack stack, boolean simulate) {
-        MEStorage storage = storage();
-        if (storage == null || stack.isEmpty())
+        if (!BridgeGuard.enter()) {
             return stack;
+        }
+        try {
+            return insertInternal(stack, simulate);
+        } finally {
+            BridgeGuard.exit();
+        }
+    }
+
+    @NotNull
+    private ItemStack insertInternal(@NotNull ItemStack stack, boolean simulate) {
+        MEStorage storage = storage();
+        if (storage == null || stack.isEmpty()) {
+            return stack;
+        }
 
         int inserted = (int) storage.insert(AEItemKey.of(stack), stack.getCount(), simulate ? Actionable.SIMULATE : Actionable.MODULATE, IActionSource.empty());
-        if (inserted <= 0)
+        if (inserted <= 0) {
             return stack;
+        }
 
-        if (!simulate)
+        if (!simulate) {
             invalidateCache();
+        }
 
-        if (inserted >= stack.getCount())
+        if (inserted >= stack.getCount()) {
             return ItemStack.EMPTY;
+        }
 
         ItemStack remainder = stack.copy();
         remainder.setCount(stack.getCount() - inserted);
@@ -180,19 +264,29 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
     @NotNull
     @Override
     public ItemStack extractItem(int slot, int amount, boolean simulate) {
-        MEStorage storage = storage();
-        if (storage == null || !refreshCache() || slot >= itemKeys.size() || amount <= 0)
+        if (!BridgeGuard.enter()) {
             return ItemStack.EMPTY;
+        }
+        try {
+            MEStorage storage = storage();
+            if (storage == null || !refreshCache() || slot >= itemKeys.size() || amount <= 0) {
+                return ItemStack.EMPTY;
+            }
 
-        AEItemKey key = itemKeys.get(slot);
-        int extracted = (int) storage.extract(key, amount, simulate ? Actionable.SIMULATE : Actionable.MODULATE, IActionSource.empty());
-        if (extracted <= 0)
-            return ItemStack.EMPTY;
+            AEItemKey key = itemKeys.get(slot);
+            int extracted = (int) storage.extract(key, amount, simulate ? Actionable.SIMULATE : Actionable.MODULATE, IActionSource.empty());
+            if (extracted <= 0) {
+                return ItemStack.EMPTY;
+            }
 
-        if (!simulate)
-            invalidateCache();
+            if (!simulate) {
+                invalidateCache();
+            }
 
-        return key.toStack(extracted);
+            return key.toStack(extracted);
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 
     @Override
@@ -202,10 +296,13 @@ public class MEProxyInventoryHandler implements IItemHandler, IFluidHandler {
 
     @Override
     public boolean isItemValid(int slot, @NotNull ItemStack stack) {
-        MEStorage storage = storage();
-        if (storage == null || stack.isEmpty())
+        if (!BridgeGuard.enter()) {
             return false;
-
-        return storage.insert(AEItemKey.of(stack), stack.getCount(), Actionable.SIMULATE, IActionSource.empty()) >= stack.getCount();
+        }
+        try {
+            return insertInternal(stack, true).getCount() == 0;
+        } finally {
+            BridgeGuard.exit();
+        }
     }
 }
