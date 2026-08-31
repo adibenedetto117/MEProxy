@@ -28,6 +28,7 @@ public class Registration {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MEProxy.MODID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MEProxy.MODID);
     public static final DeferredRegister<CreativeModeTab> TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MEProxy.MODID);
+    public static final DeferredRegister<net.minecraft.world.inventory.MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MEProxy.MODID);
 
     public static final DeferredBlock<MEProxyBlock> ME_PROXY_BLOCK = BLOCKS.register("me_proxy", MEProxyBlock::new);
 
@@ -51,6 +52,24 @@ public class Registration {
                     NETWORK_BRIDGE_BLOCK.get()
             ).build(null));
 
+    public static final DeferredBlock<com.jakeberryman.meproxy.content.grid.UniversalGridBlock> UNIVERSAL_GRID_BLOCK =
+            BLOCKS.register("universal_grid", com.jakeberryman.meproxy.content.grid.UniversalGridBlock::new);
+
+    public static final DeferredItem<MEProxyBlockItem> UNIVERSAL_GRID_ITEM = ITEMS.register("universal_grid",
+            () -> new MEProxyBlockItem(UNIVERSAL_GRID_BLOCK.get(), new Item.Properties()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.jakeberryman.meproxy.content.grid.UniversalGridBlockEntity>> UNIVERSAL_GRID_BLOCK_ENTITY =
+            BLOCK_ENTITIES.register("universal_grid",
+                    () -> BlockEntityType.Builder.of(
+                            com.jakeberryman.meproxy.content.grid.UniversalGridBlockEntity::new,
+                            UNIVERSAL_GRID_BLOCK.get()
+                    ).build(null));
+
+    public static final DeferredHolder<net.minecraft.world.inventory.MenuType<?>, net.minecraft.world.inventory.MenuType<com.jakeberryman.meproxy.content.grid.UniversalGridMenu>> UNIVERSAL_GRID_MENU =
+            MENUS.register("universal_grid",
+                    () -> net.neoforged.neoforge.common.extensions.IMenuTypeExtension.create(
+                            (id, inventory, buf) -> new com.jakeberryman.meproxy.content.grid.UniversalGridMenu(id, inventory, buf.readBlockPos())));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = TABS.register("meproxy",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.meproxy"))
@@ -58,6 +77,7 @@ public class Registration {
                     .displayItems((parameters, output) -> {
                         output.accept(ME_PROXY_ITEM.get());
                         output.accept(NETWORK_BRIDGE_ITEM.get());
+                        output.accept(UNIVERSAL_GRID_ITEM.get());
                     })
                     .build());
 
@@ -66,10 +86,14 @@ public class Registration {
         ITEMS.register(modEventBus);
         BLOCK_ENTITIES.register(modEventBus);
         TABS.register(modEventBus);
+        MENUS.register(modEventBus);
 
         modEventBus.addListener(Registration::registerCapabilities);
         modEventBus.addListener(Registration::commonSetup);
         modEventBus.addListener(com.jakeberryman.meproxy.network.BridgePackets::register);
+        if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
+            modEventBus.addListener(com.jakeberryman.meproxy.client.ClientRegistration::registerScreens);
+        }
     }
 
     private static void commonSetup(net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent event) {

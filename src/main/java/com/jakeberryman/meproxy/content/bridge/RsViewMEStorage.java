@@ -67,7 +67,7 @@ public class RsViewMEStorage implements MEStorage {
             }
             long inserted = root.insert(resource, amount, toAction(mode), BRIDGE_ACTOR);
             if (mode == Actionable.MODULATE) {
-                blockEntity.recordTransfer(true, what instanceof appeng.api.stacks.AEFluidKey, inserted);
+                blockEntity.recordTransfer(what, true, inserted);
             }
             return inserted;
         } finally {
@@ -95,7 +95,7 @@ public class RsViewMEStorage implements MEStorage {
                 AE2ExternalStorageProvider.logFailure("[meproxy debug] AE2->RS extract of {} x{} returned 0 from RS storage", what, amount);
             }
             if (mode == Actionable.MODULATE) {
-                blockEntity.recordTransfer(false, what instanceof appeng.api.stacks.AEFluidKey, extracted);
+                blockEntity.recordTransfer(what, false, extracted);
             }
             return extracted;
         } finally {

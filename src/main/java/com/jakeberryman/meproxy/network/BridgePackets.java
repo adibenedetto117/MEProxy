@@ -129,6 +129,8 @@ public final class BridgePackets {
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1").optional();
 
+        GridPackets.register(registrar);
+
         registrar.playToClient(BridgeStatus.TYPE, BridgeStatus.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientPayloadHandlers.handleStatus(payload)));
         registrar.playToClient(BreakdownResults.TYPE, BreakdownResults.STREAM_CODEC,

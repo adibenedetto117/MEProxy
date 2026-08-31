@@ -67,6 +67,9 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
     private volatile boolean rsChanged;
     private int ticksSinceDetect;
 
+    private final java.util.Map<appeng.api.stacks.AEKey, long[]> transferVolume = new java.util.HashMap<>();
+    private final List<PendingCraft> pendingCrafts = new ArrayList<>();
+
     private String bridgeName = "";
     private long itemsToRs;
     private long itemsToAe2;
@@ -113,6 +116,8 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
             }
         }
 
+        pollPendingCrafts();
+
         if (++rateTicks >= 20) {
             rateTicks = 0;
             long totalToRs = itemsToRs + fluidsToRs;
@@ -124,16 +129,202 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         }
     }
 
-    void recordTransfer(boolean towardRs, boolean fluid, long amount) {
+    void recordTransfer(appeng.api.stacks.AEKey key, boolean towardRs, long amount) {
         if (amount <= 0) {
             return;
         }
+        boolean fluid = key instanceof appeng.api.stacks.AEFluidKey;
         if (towardRs) {
             if (fluid) fluidsToRs += amount; else itemsToRs += amount;
         } else {
             if (fluid) fluidsToAe2 += amount; else itemsToAe2 += amount;
         }
+        long[] volume = transferVolume.computeIfAbsent(key, k -> new long[2]);
+        volume[towardRs ? 0 : 1] += amount;
+        if (transferVolume.size() > 256) {
+            pruneTransferVolume();
+        }
         setChanged();
+    }
+
+    private void pruneTransferVolume() {
+        List<java.util.Map.Entry<appeng.api.stacks.AEKey, long[]>> sorted = new ArrayList<>(transferVolume.entrySet());
+        sorted.sort((a, b) -> Long.compare(b.getValue()[0] + b.getValue()[1], a.getValue()[0] + a.getValue()[1]));
+        transferVolume.clear();
+        for (int i = 0; i < Math.min(128, sorted.size()); i++) {
+            transferVolume.put(sorted.get(i).getKey(), sorted.get(i).getValue());
+        }
+    }
+
+    public appeng.api.stacks.KeyCounter nativeStacks(boolean ae2Side) {
+        return ae2Side ? ae2NativeStacks() : rsNativeStacks();
+    }
+
+    public long extractNative(boolean ae2Side, appeng.api.stacks.AEKey key, long amount) {
+        if (!BridgeGuard.enter()) {
+            return 0;
+        }
+        try {
+            if (ae2Side) {
+                MEStorage storage = getAe2Storage();
+                return storage == null ? 0
+                        : storage.extract(key, amount, appeng.api.config.Actionable.MODULATE, appeng.api.networking.security.IActionSource.empty());
+            }
+            RootStorage root = getRsRootStorage();
+            if (root == null) {
+                return 0;
+            }
+            var resource = BridgeResources.toResource(key);
+            if (resource == null) {
+                return 0;
+            }
+            return root.extract(resource, amount, com.refinedmods.refinedstorage.api.core.Action.EXECUTE, RsViewMEStorage.BRIDGE_ACTOR);
+        } finally {
+            BridgeGuard.exit();
+        }
+    }
+
+    public long insertTo(int target, appeng.api.stacks.AEKey key, long amount) {
+        if (target == 1 || target == 2) {
+            if (!BridgeGuard.enter()) {
+                return 0;
+            }
+            try {
+                if (target == 1) {
+                    MEStorage storage = getAe2Storage();
+                    return storage == null ? 0
+                            : storage.insert(key, amount, appeng.api.config.Actionable.MODULATE, appeng.api.networking.security.IActionSource.empty());
+                }
+                RootStorage root = getRsRootStorage();
+                var resource = BridgeResources.toResource(key);
+                return root == null || resource == null ? 0
+                        : root.insert(resource, amount, com.refinedmods.refinedstorage.api.core.Action.EXECUTE, RsViewMEStorage.BRIDGE_ACTOR);
+            } finally {
+                BridgeGuard.exit();
+            }
+        }
+
+        long done = 0;
+        MEStorage storage = getAe2Storage();
+        if (storage != null) {
+            done = storage.insert(key, amount, appeng.api.config.Actionable.MODULATE, appeng.api.networking.security.IActionSource.empty());
+        }
+        if (done < amount) {
+            RootStorage root = getRsRootStorage();
+            var resource = BridgeResources.toResource(key);
+            if (root != null && resource != null) {
+                done += root.insert(resource, amount - done, com.refinedmods.refinedstorage.api.core.Action.EXECUTE, RsViewMEStorage.BRIDGE_ACTOR);
+            }
+        }
+        return done;
+    }
+
+    public java.util.Set<appeng.api.stacks.AEKey> ae2Craftables() {
+        IGrid grid = mainNode.getGrid();
+        return grid == null ? java.util.Set.of()
+                : grid.getCraftingService().getCraftables(key -> key instanceof appeng.api.stacks.AEItemKey);
+    }
+
+    public java.util.Set<appeng.api.stacks.AEKey> rsCraftables() {
+        Network network = mainNetworkNode.getNetwork();
+        if (network == null) {
+            return java.util.Set.of();
+        }
+        var autocrafting = network.getComponent(com.refinedmods.refinedstorage.api.network.autocrafting.AutocraftingNetworkComponent.class);
+        java.util.Set<appeng.api.stacks.AEKey> outputs = new java.util.HashSet<>();
+        for (var resource : autocrafting.getOutputs()) {
+            var key = BridgeResources.toAEKey(resource);
+            if (key instanceof appeng.api.stacks.AEItemKey) {
+                outputs.add(key);
+            }
+        }
+        return outputs;
+    }
+
+    public void requestAe2Craft(net.minecraft.server.level.ServerPlayer player, appeng.api.stacks.AEKey key, long amount) {
+        IGrid grid = mainNode.getGrid();
+        if (grid == null) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("AE2 network is offline."));
+            return;
+        }
+        var future = grid.getCraftingService().beginCraftingCalculation(
+                player.level(), appeng.api.networking.security.IActionSource::empty, key, amount,
+                appeng.api.networking.crafting.CalculationStrategy.CRAFT_LESS);
+        pendingCrafts.add(new PendingCraft(future, player.getUUID()));
+    }
+
+    public void requestRsCraft(net.minecraft.server.level.ServerPlayer player, appeng.api.stacks.AEKey key, long amount) {
+        Network network = mainNetworkNode.getNetwork();
+        var resource = BridgeResources.toResource(key);
+        if (network == null || resource == null) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("RS network is offline."));
+            return;
+        }
+        var autocrafting = network.getComponent(com.refinedmods.refinedstorage.api.network.autocrafting.AutocraftingNetworkComponent.class);
+        var result = autocrafting.ensureTask(resource, amount,
+                RsViewMEStorage.BRIDGE_ACTOR, com.refinedmods.refinedstorage.api.autocrafting.calculation.CancellationToken.NONE);
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(switch (result) {
+            case TASK_CREATED -> "RS craft started.";
+            case TASK_ALREADY_RUNNING -> "RS is already crafting that.";
+            case MISSING_RESOURCES -> "RS craft failed: missing resources.";
+        }));
+    }
+
+    private record PendingCraft(java.util.concurrent.Future<appeng.api.networking.crafting.ICraftingPlan> future,
+                                java.util.UUID player) {
+    }
+
+    private void pollPendingCrafts() {
+        if (pendingCrafts.isEmpty() || level == null || level.getServer() == null) {
+            return;
+        }
+        var iterator = pendingCrafts.iterator();
+        while (iterator.hasNext()) {
+            PendingCraft pending = iterator.next();
+            if (!pending.future().isDone()) {
+                continue;
+            }
+            iterator.remove();
+            String message;
+            try {
+                var plan = pending.future().get();
+                IGrid grid = mainNode.getGrid();
+                if (grid == null) {
+                    message = "AE2 craft failed: network went offline.";
+                } else {
+                    var result = grid.getCraftingService().submitJob(plan, null, null, false,
+                            appeng.api.networking.security.IActionSource.empty());
+                    message = result.successful() ? "AE2 craft started."
+                            : "AE2 craft failed: " + result.errorCode();
+                }
+            } catch (Exception e) {
+                message = "AE2 craft failed: " + e.getMessage();
+            }
+            var target = level.getServer().getPlayerList().getPlayer(pending.player());
+            if (target != null) {
+                target.sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
+            }
+        }
+    }
+
+    public java.util.List<com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry> topTransfers(int limit) {
+        List<java.util.Map.Entry<appeng.api.stacks.AEKey, long[]>> sorted = new ArrayList<>(transferVolume.entrySet());
+        sorted.sort((a, b) -> Long.compare(b.getValue()[0] + b.getValue()[1], a.getValue()[0] + a.getValue()[1]));
+        List<com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry> result = new ArrayList<>();
+        for (var entry : sorted) {
+            if (result.size() >= limit) {
+                break;
+            }
+            if (entry.getKey() instanceof appeng.api.stacks.AEItemKey itemKey) {
+                result.add(new com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry(
+                        itemKey.toStack(1), entry.getValue()[1], entry.getValue()[0]));
+            }
+        }
+        return result;
+    }
+
+    public long[] transferTotals() {
+        return new long[] {itemsToRs, itemsToAe2, fluidsToRs, fluidsToAe2, (long) rateToRs, (long) rateToAe2};
     }
 
     public void setBridgeName(String name) {
