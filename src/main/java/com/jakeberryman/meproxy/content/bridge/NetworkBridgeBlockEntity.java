@@ -73,6 +73,7 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         mainNode.addService(IStorageProvider.class, this);
         mainNetworkNode.initialize(new AE2ExternalStorageProvider(this));
         mainNetworkNode.getStorageConfiguration().setInsertPriority(BRIDGE_PRIORITY);
+        mainNetworkNode.getStorageConfiguration().setExtractPriority(BRIDGE_PRIORITY);
         synchronized (BRIDGES) {
             BRIDGES.add(this);
         }
