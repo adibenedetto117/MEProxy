@@ -127,6 +127,16 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         return network.getComponent(StorageNetworkComponent.class);
     }
 
+    String describeRsFailure() {
+        if (mainNetworkNode.getNetwork() == null) {
+            return "RS node has no network (bridge not cabled to RS?)";
+        }
+        if (!mainNetworkNode.isActive()) {
+            return "RS node inactive (RS network energy/controller?)";
+        }
+        return "unknown";
+    }
+
     Collection<ResourceAmount> getBridgeSourceContents() {
         var storage = mainNetworkNode.getStorage();
         return storage == null ? List.of() : storage.getAll();

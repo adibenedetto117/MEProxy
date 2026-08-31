@@ -79,7 +79,7 @@ public class RsViewMEStorage implements MEStorage {
         try {
             RootStorage root = blockEntity.getRsRootStorage();
             if (root == null) {
-                AE2ExternalStorageProvider.logFailure("[meproxy debug] AE2->RS extract of {} x{} failed: RS network not available (power?)", what, amount);
+                AE2ExternalStorageProvider.logFailure("[meproxy debug] AE2->RS extract of {} x{} failed: {}", what, amount, blockEntity.describeRsFailure());
                 return 0;
             }
             ResourceKey resource = BridgeResources.toResource(what);
