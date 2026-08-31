@@ -29,6 +29,14 @@ public class Registration {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MEProxy.MODID);
     public static final DeferredRegister<CreativeModeTab> TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MEProxy.MODID);
     public static final DeferredRegister<net.minecraft.world.inventory.MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MEProxy.MODID);
+    public static final DeferredRegister<net.minecraft.core.component.DataComponentType<?>> DATA_COMPONENTS = DeferredRegister.create(Registries.DATA_COMPONENT_TYPE, MEProxy.MODID);
+
+    public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<net.minecraft.core.GlobalPos>> LINKED_BRIDGE =
+            DATA_COMPONENTS.register("linked_bridge",
+                    () -> net.minecraft.core.component.DataComponentType.<net.minecraft.core.GlobalPos>builder()
+                            .persistent(net.minecraft.core.GlobalPos.CODEC)
+                            .networkSynchronized(net.minecraft.core.GlobalPos.STREAM_CODEC)
+                            .build());
 
     public static final DeferredBlock<MEProxyBlock> ME_PROXY_BLOCK = BLOCKS.register("me_proxy", MEProxyBlock::new);
 
@@ -68,7 +76,11 @@ public class Registration {
     public static final DeferredHolder<net.minecraft.world.inventory.MenuType<?>, net.minecraft.world.inventory.MenuType<com.jakeberryman.meproxy.content.grid.UniversalGridMenu>> UNIVERSAL_GRID_MENU =
             MENUS.register("universal_grid",
                     () -> net.neoforged.neoforge.common.extensions.IMenuTypeExtension.create(
-                            (id, inventory, buf) -> new com.jakeberryman.meproxy.content.grid.UniversalGridMenu(id, inventory, buf.readBlockPos())));
+                            com.jakeberryman.meproxy.content.grid.UniversalGridMenu::new));
+
+    public static final DeferredItem<com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem> WIRELESS_UNIVERSAL_GRID_ITEM =
+            ITEMS.register("wireless_universal_grid",
+                    () -> new com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem(new Item.Properties()));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = TABS.register("meproxy",
             () -> CreativeModeTab.builder()
@@ -78,6 +90,7 @@ public class Registration {
                         output.accept(ME_PROXY_ITEM.get());
                         output.accept(NETWORK_BRIDGE_ITEM.get());
                         output.accept(UNIVERSAL_GRID_ITEM.get());
+                        output.accept(WIRELESS_UNIVERSAL_GRID_ITEM.get());
                     })
                     .build());
 
@@ -87,12 +100,15 @@ public class Registration {
         BLOCK_ENTITIES.register(modEventBus);
         TABS.register(modEventBus);
         MENUS.register(modEventBus);
+        DATA_COMPONENTS.register(modEventBus);
 
         modEventBus.addListener(Registration::registerCapabilities);
         modEventBus.addListener(Registration::commonSetup);
         modEventBus.addListener(com.jakeberryman.meproxy.network.BridgePackets::register);
         if (net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
             modEventBus.addListener(com.jakeberryman.meproxy.client.ClientRegistration::registerScreens);
+            modEventBus.addListener(com.jakeberryman.meproxy.client.ClientKeybinds::registerKeys);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.jakeberryman.meproxy.client.ClientKeybinds::onClientTick);
         }
     }
 

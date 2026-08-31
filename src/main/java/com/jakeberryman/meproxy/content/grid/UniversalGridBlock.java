@@ -32,7 +32,10 @@ public class UniversalGridBlock extends Block implements EntityBlock {
                 && level.getBlockEntity(pos) instanceof UniversalGridBlockEntity) {
             serverPlayer.openMenu(new SimpleMenuProvider(
                     (id, inventory, p) -> new UniversalGridMenu(id, inventory, pos),
-                    Component.translatable("block.meproxy.universal_grid")), buf -> buf.writeBlockPos(pos));
+                    Component.translatable("block.meproxy.universal_grid")), buf -> {
+                buf.writeBoolean(false);
+                buf.writeBlockPos(pos);
+            });
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

@@ -13,8 +13,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.List;
 
 public class BridgeStatusScreen extends Screen {
+    private static final int PANEL_WIDTH = 256;
+    private static final int PANEL_HEIGHT = 240;
     private static final int ROW_HEIGHT = 18;
-    private static final int VISIBLE_ROWS = 6;
+    private static final int VISIBLE_ROWS = 5;
 
     private final BlockPos pos;
     private BridgePackets.BridgeStatus status;
@@ -47,26 +49,26 @@ public class BridgeStatusScreen extends Screen {
     }
 
     private int left() {
-        return width / 2 - 130;
+        return (width - PANEL_WIDTH) / 2;
     }
 
     private int top() {
-        return Math.max(10, height / 2 - 120);
+        return Math.max(8, (height - PANEL_HEIGHT) / 2);
     }
 
     @Override
     protected void init() {
-        nameBox = new EditBox(font, left(), top() + 14, 180, 16, Component.literal("name"));
+        nameBox = new EditBox(font, left() + 10, top() + 18, 176, 16, Component.literal("name"));
         nameBox.setMaxLength(60);
         nameBox.setValue(status.name());
         addRenderableWidget(nameBox);
 
         addRenderableWidget(Button.builder(Component.literal("Save"),
                         button -> PacketDistributor.sendToServer(new BridgePackets.SetBridgeName(pos, nameBox.getValue())))
-                .bounds(left() + 186, top() + 13, 50, 18)
+                .bounds(left() + 192, top() + 17, 54, 18)
                 .build());
 
-        searchBox = new EditBox(font, left(), top() + 96, 236, 16, Component.literal("search"));
+        searchBox = new EditBox(font, left() + 10, top() + 116, 236, 14, Component.literal("search"));
         searchBox.setMaxLength(64);
         searchBox.setHint(Component.literal("Search items...").withStyle(ChatFormatting.DARK_GRAY));
         searchBox.setResponder(text -> {
@@ -88,41 +90,56 @@ public class BridgeStatusScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderTransparentBackground(graphics);
+    }
+
+    private void drawPanel(GuiGraphics graphics, int x, int y, int w, int h) {
+        graphics.fill(x, y, x + w, y + h, 0xFF000000);
+        graphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, 0xFFC6C6C6);
+        graphics.fill(x + 2, y + 2, x + w - 2, y + 3, 0xFFFFFFFF);
+        graphics.fill(x + 2, y + 2, x + 3, y + h - 2, 0xFFFFFFFF);
+        graphics.fill(x + 2, y + h - 3, x + w - 2, y + h - 2, 0xFF555555);
+        graphics.fill(x + w - 3, y + 2, x + w - 2, y + h - 2, 0xFF555555);
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
 
         int x = left();
         int y = top();
+        drawPanel(graphics, x, y, PANEL_WIDTH, PANEL_HEIGHT);
 
-        graphics.drawString(font, title.copy().withStyle(ChatFormatting.BOLD)
-                .append(Component.literal("  [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]")
-                        .withStyle(ChatFormatting.GRAY)), x, y, 0xFFFFFF);
+        graphics.drawString(font, title.copy()
+                .append(Component.literal("  [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]")), x + 10, y + 7, 0x404040, false);
 
         boolean ae2Online = "online".equals(status.ae2Status());
         boolean rsOnline = "online".equals(status.rsStatus());
-        graphics.drawString(font, Component.literal("AE2: " + status.ae2Status() + "  (" + status.ae2Types() + " types)")
-                .withStyle(ae2Online ? ChatFormatting.GREEN : ChatFormatting.RED), x, y + 38, 0xFFFFFF);
-        graphics.drawString(font, Component.literal("RS:  " + status.rsStatus() + "  (" + status.rsTypes() + " types)")
-                .withStyle(rsOnline ? ChatFormatting.GREEN : ChatFormatting.RED), x, y + 50, 0xFFFFFF);
+        graphics.drawString(font, "AE2: " + status.ae2Status() + "  (" + status.ae2Types() + " types)",
+                x + 10, y + 42, ae2Online ? 0x2E7D32 : 0xB71C1C, false);
+        graphics.drawString(font, "RS: " + status.rsStatus() + "  (" + status.rsTypes() + " types)",
+                x + 10, y + 54, rsOnline ? 0x2E7D32 : 0xB71C1C, false);
 
-        graphics.drawString(font, Component.literal(String.format("To RS: %,d items, %,d mB  (%.0f/s now)",
-                status.itemsToRs(), status.fluidsToRs(), status.rateToRs())).withStyle(ChatFormatting.AQUA), x, y + 66, 0xFFFFFF);
-        graphics.drawString(font, Component.literal(String.format("To AE2: %,d items, %,d mB  (%.0f/s now)",
-                status.itemsToAe2(), status.fluidsToAe2(), status.rateToAe2())).withStyle(ChatFormatting.LIGHT_PURPLE), x, y + 78, 0xFFFFFF);
+        graphics.drawString(font, String.format("To RS: %,d items, %,d mB  (%.0f/s)",
+                status.itemsToRs(), status.fluidsToRs(), status.rateToRs()), x + 10, y + 72, 0x1565C0, false);
+        graphics.drawString(font, String.format("To AE2: %,d items, %,d mB  (%.0f/s)",
+                status.itemsToAe2(), status.fluidsToAe2(), status.rateToAe2()), x + 10, y + 84, 0x6A1B9A, false);
 
-        int listY = y + 118;
+        graphics.fill(x + 8, y + 134, x + PANEL_WIDTH - 8, y + 136 + VISIBLE_ROWS * ROW_HEIGHT, 0xFF8B8B8B);
+
+        int listY = y + 136;
         int end = Math.min(entries.size(), scrollOffset + VISIBLE_ROWS);
         for (int i = scrollOffset; i < end; i++) {
             BridgePackets.BreakdownEntry entry = entries.get(i);
             int rowY = listY + (i - scrollOffset) * ROW_HEIGHT;
-            graphics.renderItem(entry.stack(), x, rowY);
-            graphics.drawString(font, entry.stack().getHoverName(), x + 20, rowY + 4, 0xFFFFFF);
+            graphics.renderItem(entry.stack(), x + 10, rowY);
+            graphics.drawString(font, entry.stack().getHoverName(), x + 30, rowY + 4, 0x2B2B2B, false);
             String counts = String.format("%,d AE2 / %,d RS", entry.ae2Amount(), entry.rsAmount());
-            graphics.drawString(font, Component.literal(counts).withStyle(ChatFormatting.GRAY),
-                    x + 236 - font.width(counts), rowY + 4, 0xFFFFFF);
+            graphics.drawString(font, counts, x + PANEL_WIDTH - 12 - font.width(counts), rowY + 4, 0x404040, false);
         }
         if (entries.isEmpty()) {
-            graphics.drawString(font, Component.literal("No matching items").withStyle(ChatFormatting.DARK_GRAY), x, listY, 0xFFFFFF);
+            graphics.drawString(font, "No matching items", x + 12, listY + 4, 0x555555, false);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);

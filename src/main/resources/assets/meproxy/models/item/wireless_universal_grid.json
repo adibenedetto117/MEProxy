@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "meproxy:item/wireless_universal_grid"
+  }
+}

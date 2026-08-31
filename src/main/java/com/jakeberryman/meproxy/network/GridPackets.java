@@ -111,6 +111,17 @@ public final class GridPackets {
         }
     }
 
+    public record OpenWirelessGrid() implements CustomPacketPayload {
+        public static final Type<OpenWirelessGrid> TYPE = new Type<>(MEProxy.asResource("open_wireless_grid"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, OpenWirelessGrid> STREAM_CODEC =
+                StreamCodec.unit(new OpenWirelessGrid());
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
     public record GridCraft(BlockPos pos, ItemStack stack, int network, int amount) implements CustomPacketPayload {
         public static final Type<GridCraft> TYPE = new Type<>(MEProxy.asResource("grid_craft"));
         public static final StreamCodec<RegistryFriendlyByteBuf, GridCraft> STREAM_CODEC = StreamCodec.of(
@@ -152,6 +163,18 @@ public final class GridPackets {
                     NetworkBridgeBlockEntity bridge = resolveBridge(context.player(), payload.pos);
                     if (bridge != null && context.player() instanceof ServerPlayer serverPlayer) {
                         handleInsertCarried(serverPlayer, bridge, payload.single);
+                    }
+                }));
+        registrar.playToServer(OpenWirelessGrid.TYPE, OpenWirelessGrid.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer serverPlayer) {
+                        ItemStack stack = findWirelessGrid(serverPlayer);
+                        if (stack.isEmpty()) {
+                            serverPlayer.displayClientMessage(
+                                    Component.literal("No Wireless Universal Grid equipped or in inventory."), true);
+                        } else {
+                            com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem.open(serverPlayer, stack);
+                        }
                     }
                 }));
         registrar.playToServer(GridCraft.TYPE, GridCraft.STREAM_CODEC,
@@ -252,6 +275,27 @@ public final class GridPackets {
         }
         entries.sort((a, b) -> Long.compare(b.ae2Amount() + b.rsAmount(), a.ae2Amount() + a.rsAmount()));
         return entries.size() > 500 ? entries.subList(0, 500) : entries;
+    }
+
+    private static ItemStack findWirelessGrid(ServerPlayer player) {
+        if (net.neoforged.fml.ModList.get().isLoaded("curios")) {
+            ItemStack fromCurios = com.jakeberryman.meproxy.compat.CuriosCompat.findWirelessGrid(player);
+            if (!fromCurios.isEmpty()) {
+                return fromCurios;
+            }
+        }
+        if (player.getMainHandItem().getItem() instanceof com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem) {
+            return player.getMainHandItem();
+        }
+        if (player.getOffhandItem().getItem() instanceof com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem) {
+            return player.getOffhandItem();
+        }
+        for (ItemStack stack : player.getInventory().items) {
+            if (stack.getItem() instanceof com.jakeberryman.meproxy.content.grid.WirelessUniversalGridItem) {
+                return stack;
+            }
+        }
+        return ItemStack.EMPTY;
     }
 
     @Nullable

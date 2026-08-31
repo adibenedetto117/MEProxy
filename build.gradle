@@ -43,11 +43,16 @@ repositories {
         name = 'CreeperHost'
         url = 'https://maven.creeperhost.net'
     }
+    maven {
+        name = 'Illusive Soulworks'
+        url = 'https://maven.theillusivec4.top/'
+    }
 }
 
 dependencies {
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
     implementation "com.refinedmods.refinedstorage:refinedstorage-neoforge:${rs_version}"
+    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
 }
 
 tasks.named('processResources', ProcessResources).configure {
