@@ -60,14 +60,8 @@ public class Registration {
 
     private static void registerCapabilities(RegisterCapabilitiesEvent event) {
         event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, ME_PROXY_BLOCK_ENTITY.get(),
-                (blockEntity, side) -> {
-                    var grid = blockEntity.getMainNode().getGrid();
-                    return grid == null ? null : new MEProxyInventoryHandler(grid.getStorageService().getInventory());
-                });
+                (blockEntity, side) -> blockEntity.getHandler());
         event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, ME_PROXY_BLOCK_ENTITY.get(),
-                (blockEntity, side) -> {
-                    var grid = blockEntity.getMainNode().getGrid();
-                    return grid == null ? null : new MEProxyInventoryHandler(grid.getStorageService().getInventory());
-                });
+                (blockEntity, side) -> blockEntity.getHandler());
     }
 }

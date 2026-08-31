@@ -7,8 +7,14 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class MEProxyBlockEntity extends AENetworkedBlockEntity {
+    private final MEProxyInventoryHandler handler = new MEProxyInventoryHandler(this);
+
     public MEProxyBlockEntity(BlockEntityType<?> blockEntityType, BlockPos pos, BlockState blockState) {
         super(blockEntityType, pos, blockState);
         this.getMainNode().setFlags(GridFlags.REQUIRE_CHANNEL);
+    }
+
+    public MEProxyInventoryHandler getHandler() {
+        return handler;
     }
 }
