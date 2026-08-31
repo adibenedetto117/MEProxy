@@ -476,6 +476,22 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
         return caches;
     }
 
+    List<NetworkBridgeBlockEntity> getBridgesOnSameAe2Grid() {
+        IGrid grid = mainNode.getGrid();
+        if (grid == null) {
+            return List.of();
+        }
+        List<NetworkBridgeBlockEntity> result = new ArrayList<>();
+        synchronized (BRIDGES) {
+            for (NetworkBridgeBlockEntity bridge : BRIDGES) {
+                if (bridge.mainNode.getGrid() == grid) {
+                    result.add(bridge);
+                }
+            }
+        }
+        return result;
+    }
+
     @Nullable
     MEStorage getAe2Storage() {
         IGrid grid = mainNode.getGrid();
