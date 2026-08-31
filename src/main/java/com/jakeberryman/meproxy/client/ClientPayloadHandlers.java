@@ -27,10 +27,4 @@ public final class ClientPayloadHandlers {
             screen.updateList(payload.entries());
         }
     }
-
-    public static void handleGridStats(com.jakeberryman.meproxy.network.GridPackets.GridStats payload) {
-        if (Minecraft.getInstance().screen instanceof UniversalGridScreen screen && screen.getPos().equals(payload.pos())) {
-            screen.updateStats(payload);
-        }
-    }
 }

@@ -1,14 +1,15 @@
 package com.jakeberryman.meproxy.content.grid;
 
+import appeng.api.stacks.AEItemKey;
+import com.jakeberryman.meproxy.content.bridge.NetworkBridgeBlockEntity;
 import com.jakeberryman.meproxy.entry.Registration;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.Container;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 public class UniversalGridMenu extends AbstractContainerMenu {
     public final BlockPos pos;
@@ -17,18 +18,22 @@ public class UniversalGridMenu extends AbstractContainerMenu {
         super(Registration.UNIVERSAL_GRID_MENU.get(), containerId);
         this.pos = pos;
 
-        Container buffer = inventory.player.level().getBlockEntity(pos) instanceof UniversalGridBlockEntity grid
-                ? grid.getBuffer() : new SimpleContainer(1);
-        addSlot(new Slot(buffer, 0, 187, 128));
-
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(inventory, 9 + row * 9 + col, 25 + col * 18, 152 + row * 18));
+                addSlot(new Slot(inventory, 9 + row * 9 + col, 8 + col * 18, 108 + row * 18));
             }
         }
         for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(inventory, col, 25 + col * 18, 210));
+            addSlot(new Slot(inventory, col, 8 + col * 18, 166));
         }
+    }
+
+    @Nullable
+    public NetworkBridgeBlockEntity resolveBridge(Player player) {
+        if (!player.blockPosition().closerThan(pos, 8)) {
+            return null;
+        }
+        return player.level().getBlockEntity(pos) instanceof UniversalGridBlockEntity grid ? grid.findBridge() : null;
     }
 
     @Override
@@ -37,23 +42,28 @@ public class UniversalGridMenu extends AbstractContainerMenu {
         if (!slot.hasItem()) {
             return ItemStack.EMPTY;
         }
-        ItemStack stack = slot.getItem();
-        ItemStack original = stack.copy();
-
-        if (index == 0) {
-            if (!moveItemStackTo(stack, 1, 37, true)) {
-                return ItemStack.EMPTY;
-            }
-        } else if (!moveItemStackTo(stack, 0, 1, false)) {
+        if (player.level().isClientSide()) {
             return ItemStack.EMPTY;
         }
 
-        if (stack.isEmpty()) {
-            slot.set(ItemStack.EMPTY);
-        } else {
+        NetworkBridgeBlockEntity bridge = resolveBridge(player);
+        if (bridge == null) {
+            return ItemStack.EMPTY;
+        }
+
+        ItemStack stack = slot.getItem();
+        AEItemKey key = AEItemKey.of(stack);
+        if (key == null) {
+            return ItemStack.EMPTY;
+        }
+
+        long inserted = bridge.insertTo(0, key, stack.getCount());
+        if (inserted > 0) {
+            stack.shrink((int) inserted);
+            slot.set(stack.isEmpty() ? ItemStack.EMPTY : stack);
             slot.setChanged();
         }
-        return original;
+        return ItemStack.EMPTY;
     }
 
     @Override

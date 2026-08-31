@@ -5,7 +5,7 @@ import appeng.api.stacks.AEKey;
 import com.jakeberryman.meproxy.MEProxy;
 import com.jakeberryman.meproxy.client.ClientPayloadHandlers;
 import com.jakeberryman.meproxy.content.bridge.NetworkBridgeBlockEntity;
-import com.jakeberryman.meproxy.content.grid.UniversalGridBlockEntity;
+import com.jakeberryman.meproxy.content.grid.UniversalGridMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -24,6 +24,10 @@ import java.util.Locale;
 import java.util.Set;
 
 public final class GridPackets {
+    public static final int EXTRACT_STACK_TO_CARRIED = 0;
+    public static final int EXTRACT_HALF_TO_CARRIED = 1;
+    public static final int EXTRACT_STACK_TO_INVENTORY = 2;
+
     private GridPackets() {
     }
 
@@ -76,16 +80,30 @@ public final class GridPackets {
         }
     }
 
-    public record GridExtract(BlockPos pos, ItemStack stack, int network, int amount) implements CustomPacketPayload {
+    public record GridExtract(BlockPos pos, ItemStack stack, int mode) implements CustomPacketPayload {
         public static final Type<GridExtract> TYPE = new Type<>(MEProxy.asResource("grid_extract"));
         public static final StreamCodec<RegistryFriendlyByteBuf, GridExtract> STREAM_CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeBlockPos(p.pos);
                     ItemStack.STREAM_CODEC.encode(buf, p.stack);
-                    buf.writeVarInt(p.network);
-                    buf.writeVarInt(p.amount);
+                    buf.writeVarInt(p.mode);
                 },
-                buf -> new GridExtract(buf.readBlockPos(), ItemStack.STREAM_CODEC.decode(buf), buf.readVarInt(), buf.readVarInt()));
+                buf -> new GridExtract(buf.readBlockPos(), ItemStack.STREAM_CODEC.decode(buf), buf.readVarInt()));
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record GridInsertCarried(BlockPos pos, boolean single) implements CustomPacketPayload {
+        public static final Type<GridInsertCarried> TYPE = new Type<>(MEProxy.asResource("grid_insert_carried"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, GridInsertCarried> STREAM_CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeBlockPos(p.pos);
+                    buf.writeBoolean(p.single);
+                },
+                buf -> new GridInsertCarried(buf.readBlockPos(), buf.readBoolean()));
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -110,81 +128,9 @@ public final class GridPackets {
         }
     }
 
-    public record GridSetTarget(BlockPos pos, int target) implements CustomPacketPayload {
-        public static final Type<GridSetTarget> TYPE = new Type<>(MEProxy.asResource("grid_set_target"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, GridSetTarget> STREAM_CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeBlockPos(p.pos);
-                    buf.writeVarInt(p.target);
-                },
-                buf -> new GridSetTarget(buf.readBlockPos(), buf.readVarInt()));
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record RequestGridStats(BlockPos pos) implements CustomPacketPayload {
-        public static final Type<RequestGridStats> TYPE = new Type<>(MEProxy.asResource("request_grid_stats"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, RequestGridStats> STREAM_CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeBlockPos(p.pos),
-                buf -> new RequestGridStats(buf.readBlockPos()));
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
-    public record GridStats(BlockPos pos, long itemsToRs, long itemsToAe2, long fluidsToRs, long fluidsToAe2,
-                            long rateToRs, long rateToAe2,
-                            List<BridgePackets.BreakdownEntry> topTransfers) implements CustomPacketPayload {
-        public static final Type<GridStats> TYPE = new Type<>(MEProxy.asResource("grid_stats"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, GridStats> STREAM_CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeBlockPos(p.pos);
-                    buf.writeVarLong(p.itemsToRs);
-                    buf.writeVarLong(p.itemsToAe2);
-                    buf.writeVarLong(p.fluidsToRs);
-                    buf.writeVarLong(p.fluidsToAe2);
-                    buf.writeVarLong(p.rateToRs);
-                    buf.writeVarLong(p.rateToAe2);
-                    buf.writeVarInt(p.topTransfers.size());
-                    for (BridgePackets.BreakdownEntry entry : p.topTransfers) {
-                        ItemStack.STREAM_CODEC.encode(buf, entry.stack());
-                        buf.writeVarLong(entry.ae2Amount());
-                        buf.writeVarLong(entry.rsAmount());
-                    }
-                },
-                buf -> {
-                    BlockPos pos = buf.readBlockPos();
-                    long itemsToRs = buf.readVarLong();
-                    long itemsToAe2 = buf.readVarLong();
-                    long fluidsToRs = buf.readVarLong();
-                    long fluidsToAe2 = buf.readVarLong();
-                    long rateToRs = buf.readVarLong();
-                    long rateToAe2 = buf.readVarLong();
-                    int size = buf.readVarInt();
-                    List<BridgePackets.BreakdownEntry> top = new ArrayList<>(size);
-                    for (int i = 0; i < size; i++) {
-                        top.add(new BridgePackets.BreakdownEntry(ItemStack.STREAM_CODEC.decode(buf),
-                                buf.readVarLong(), buf.readVarLong()));
-                    }
-                    return new GridStats(pos, itemsToRs, itemsToAe2, fluidsToRs, fluidsToAe2, rateToRs, rateToAe2, top);
-                });
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     public static void register(PayloadRegistrar registrar) {
         registrar.playToClient(GridList.TYPE, GridList.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientPayloadHandlers.handleGridList(payload)));
-        registrar.playToClient(GridStats.TYPE, GridStats.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> ClientPayloadHandlers.handleGridStats(payload)));
 
         registrar.playToServer(RequestGridList.TYPE, RequestGridList.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
@@ -199,6 +145,13 @@ public final class GridPackets {
                     NetworkBridgeBlockEntity bridge = resolveBridge(context.player(), payload.pos);
                     if (bridge != null && context.player() instanceof ServerPlayer serverPlayer) {
                         handleExtract(serverPlayer, bridge, payload);
+                    }
+                }));
+        registrar.playToServer(GridInsertCarried.TYPE, GridInsertCarried.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    NetworkBridgeBlockEntity bridge = resolveBridge(context.player(), payload.pos);
+                    if (bridge != null && context.player() instanceof ServerPlayer serverPlayer) {
+                        handleInsertCarried(serverPlayer, bridge, payload.single);
                     }
                 }));
         registrar.playToServer(GridCraft.TYPE, GridCraft.STREAM_CODEC,
@@ -216,23 +169,6 @@ public final class GridPackets {
                         }
                     }
                 }));
-        registrar.playToServer(GridSetTarget.TYPE, GridSetTarget.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> {
-                    UniversalGridBlockEntity grid = resolveGrid(context.player(), payload.pos);
-                    if (grid != null) {
-                        grid.setInsertTarget(payload.target);
-                    }
-                }));
-        registrar.playToServer(RequestGridStats.TYPE, RequestGridStats.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> {
-                    NetworkBridgeBlockEntity bridge = resolveBridge(context.player(), payload.pos);
-                    if (bridge != null && context.player() instanceof ServerPlayer serverPlayer) {
-                        long[] totals = bridge.transferTotals();
-                        PacketDistributor.sendToPlayer(serverPlayer, new GridStats(payload.pos,
-                                totals[0], totals[1], totals[2], totals[3], totals[4], totals[5],
-                                bridge.topTransfers(20)));
-                    }
-                }));
     }
 
     private static void handleExtract(ServerPlayer player, NetworkBridgeBlockEntity bridge, GridExtract payload) {
@@ -240,24 +176,54 @@ public final class GridPackets {
         if (key == null) {
             return;
         }
-        int amount = Math.max(1, Math.min(payload.amount, payload.stack.getMaxStackSize()));
-        boolean fromAe2 = payload.network != 2;
-        long extracted = bridge.extractNative(fromAe2, key, amount);
-        if (extracted <= 0 && payload.network == 0) {
-            fromAe2 = false;
-            extracted = bridge.extractNative(false, key, amount);
+
+        boolean toCarried = payload.mode != EXTRACT_STACK_TO_INVENTORY;
+        if (toCarried && !player.containerMenu.getCarried().isEmpty()) {
+            return;
+        }
+
+        int amount = payload.stack.getMaxStackSize();
+        if (payload.mode == EXTRACT_HALF_TO_CARRIED) {
+            amount = Math.max(1, amount / 2);
+        }
+
+        long extracted = bridge.extractNative(true, key, amount);
+        if (extracted < amount) {
+            extracted += bridge.extractNative(false, key, amount - extracted);
         }
         if (extracted <= 0) {
             return;
         }
-        ItemStack give = key.toStack((int) extracted);
-        if (!player.getInventory().add(give) && !give.isEmpty()) {
-            long returned = bridge.insertTo(fromAe2 ? 1 : 2, key, give.getCount());
-            give.shrink((int) returned);
-            if (!give.isEmpty()) {
-                player.drop(give, false);
+
+        ItemStack result = key.toStack((int) extracted);
+        if (toCarried) {
+            player.containerMenu.setCarried(result);
+        } else if (!player.getInventory().add(result) && !result.isEmpty()) {
+            long returned = bridge.insertTo(0, key, result.getCount());
+            result.shrink((int) returned);
+            if (!result.isEmpty()) {
+                player.drop(result, false);
             }
         }
+        player.containerMenu.broadcastChanges();
+    }
+
+    private static void handleInsertCarried(ServerPlayer player, NetworkBridgeBlockEntity bridge, boolean single) {
+        ItemStack carried = player.containerMenu.getCarried();
+        if (carried.isEmpty()) {
+            return;
+        }
+        AEItemKey key = AEItemKey.of(carried);
+        if (key == null) {
+            return;
+        }
+        int amount = single ? 1 : carried.getCount();
+        long inserted = bridge.insertTo(0, key, amount);
+        if (inserted > 0) {
+            carried.shrink((int) inserted);
+            player.containerMenu.setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
+        }
+        player.containerMenu.broadcastChanges();
     }
 
     private static List<GridEntry> buildGridList(NetworkBridgeBlockEntity bridge, String query) {
@@ -285,24 +251,17 @@ public final class GridPackets {
                     craftAe2.contains(key), craftRs.contains(key)));
         }
         entries.sort((a, b) -> Long.compare(b.ae2Amount() + b.rsAmount(), a.ae2Amount() + a.rsAmount()));
-        return entries.size() > 100 ? entries.subList(0, 100) : entries;
-    }
-
-    @Nullable
-    private static UniversalGridBlockEntity resolveGrid(net.minecraft.world.entity.player.Player player, BlockPos pos) {
-        if (player == null || !player.blockPosition().closerThan(pos, 8)) {
-            return null;
-        }
-        return player.level().getBlockEntity(pos) instanceof UniversalGridBlockEntity grid ? grid : null;
+        return entries.size() > 500 ? entries.subList(0, 500) : entries;
     }
 
     @Nullable
     private static NetworkBridgeBlockEntity resolveBridge(net.minecraft.world.entity.player.Player player, BlockPos pos) {
-        UniversalGridBlockEntity grid = resolveGrid(player, pos);
-        if (grid == null) {
+        if (player == null
+                || !(player.containerMenu instanceof UniversalGridMenu menu)
+                || !menu.pos.equals(pos)) {
             return null;
         }
-        NetworkBridgeBlockEntity bridge = grid.findBridge();
+        NetworkBridgeBlockEntity bridge = menu.resolveBridge(player);
         if (bridge == null && player instanceof ServerPlayer serverPlayer) {
             serverPlayer.sendSystemMessage(Component.literal("Universal Grid: no Network Bridge is touching this block."));
         }
