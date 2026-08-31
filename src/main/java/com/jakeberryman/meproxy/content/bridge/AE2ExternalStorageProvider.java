@@ -80,7 +80,11 @@ public class AE2ExternalStorageProvider implements ExternalStorageProvider {
             if (key == null) {
                 return 0;
             }
-            return storage.insert(key, amount, toActionable(action), IActionSource.empty());
+            long inserted = storage.insert(key, amount, toActionable(action), IActionSource.empty());
+            if (action == Action.EXECUTE) {
+                blockEntity.recordTransfer(false, key instanceof appeng.api.stacks.AEFluidKey, inserted);
+            }
+            return inserted;
         } finally {
             BridgeGuard.exit();
         }
@@ -106,6 +110,9 @@ public class AE2ExternalStorageProvider implements ExternalStorageProvider {
             long extracted = storage.extract(key, amount, toActionable(action), IActionSource.empty());
             if (extracted == 0 && amount > 0) {
                 logFailure("[meproxy debug] RS->AE2 extract of {} x{} returned 0 from AE2 storage (key {})", resource, amount, key);
+            }
+            if (action == Action.EXECUTE) {
+                blockEntity.recordTransfer(true, key instanceof appeng.api.stacks.AEFluidKey, extracted);
             }
             return extracted;
         } finally {

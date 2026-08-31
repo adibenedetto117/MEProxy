@@ -65,7 +65,11 @@ public class RsViewMEStorage implements MEStorage {
             if (resource == null) {
                 return 0;
             }
-            return root.insert(resource, amount, toAction(mode), BRIDGE_ACTOR);
+            long inserted = root.insert(resource, amount, toAction(mode), BRIDGE_ACTOR);
+            if (mode == Actionable.MODULATE) {
+                blockEntity.recordTransfer(true, what instanceof appeng.api.stacks.AEFluidKey, inserted);
+            }
+            return inserted;
         } finally {
             BridgeGuard.exit();
         }
@@ -89,6 +93,9 @@ public class RsViewMEStorage implements MEStorage {
             long extracted = root.extract(resource, amount, toAction(mode), BRIDGE_ACTOR);
             if (extracted == 0 && amount > 0) {
                 AE2ExternalStorageProvider.logFailure("[meproxy debug] AE2->RS extract of {} x{} returned 0 from RS storage", what, amount);
+            }
+            if (mode == Actionable.MODULATE) {
+                blockEntity.recordTransfer(false, what instanceof appeng.api.stacks.AEFluidKey, extracted);
             }
             return extracted;
         } finally {

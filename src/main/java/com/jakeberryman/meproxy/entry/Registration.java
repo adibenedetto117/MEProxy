@@ -69,6 +69,7 @@ public class Registration {
 
         modEventBus.addListener(Registration::registerCapabilities);
         modEventBus.addListener(Registration::commonSetup);
+        modEventBus.addListener(com.jakeberryman.meproxy.network.BridgePackets::register);
     }
 
     private static void commonSetup(net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent event) {

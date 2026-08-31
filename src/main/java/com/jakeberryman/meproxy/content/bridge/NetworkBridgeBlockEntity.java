@@ -67,6 +67,17 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
     private volatile boolean rsChanged;
     private int ticksSinceDetect;
 
+    private String bridgeName = "";
+    private long itemsToRs;
+    private long itemsToAe2;
+    private long fluidsToRs;
+    private long fluidsToAe2;
+    private double rateToRs;
+    private double rateToAe2;
+    private long prevTotalToRs;
+    private long prevTotalToAe2;
+    private int rateTicks;
+
     public NetworkBridgeBlockEntity(BlockPos pos, BlockState state) {
         super(Registration.NETWORK_BRIDGE_BLOCK_ENTITY.get(), pos, state,
                 new ExternalStorageNetworkNode(RS_ENERGY_USAGE, System::currentTimeMillis));
@@ -101,6 +112,122 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
                 grid.getStorageService().invalidateCache();
             }
         }
+
+        if (++rateTicks >= 20) {
+            rateTicks = 0;
+            long totalToRs = itemsToRs + fluidsToRs;
+            long totalToAe2 = itemsToAe2 + fluidsToAe2;
+            rateToRs = totalToRs - prevTotalToRs;
+            rateToAe2 = totalToAe2 - prevTotalToAe2;
+            prevTotalToRs = totalToRs;
+            prevTotalToAe2 = totalToAe2;
+        }
+    }
+
+    void recordTransfer(boolean towardRs, boolean fluid, long amount) {
+        if (amount <= 0) {
+            return;
+        }
+        if (towardRs) {
+            if (fluid) fluidsToRs += amount; else itemsToRs += amount;
+        } else {
+            if (fluid) fluidsToAe2 += amount; else itemsToAe2 += amount;
+        }
+        setChanged();
+    }
+
+    public void setBridgeName(String name) {
+        bridgeName = name.length() > 60 ? name.substring(0, 60) : name;
+        setChanged();
+    }
+
+    String describeAe2Status() {
+        IGridNode node = mainNode.getNode();
+        if (node == null) {
+            return "offline: not connected (ME cable? chunk?)";
+        }
+        if (!node.isActive()) {
+            return "offline: no channel or no AE2 network power";
+        }
+        return "online";
+    }
+
+    String describeRsStatus() {
+        return getRsRootStorage() != null ? "online" : "offline: " + describeRsFailure();
+    }
+
+    private appeng.api.stacks.KeyCounter ae2NativeStacks() {
+        var counter = new appeng.api.stacks.KeyCounter();
+        if (BridgeGuard.enter()) {
+            try {
+                MEStorage storage = getAe2Storage();
+                if (storage != null) {
+                    storage.getAvailableStacks(counter);
+                }
+            } finally {
+                BridgeGuard.exit();
+            }
+        }
+        return counter;
+    }
+
+    private appeng.api.stacks.KeyCounter rsNativeStacks() {
+        var counter = new appeng.api.stacks.KeyCounter();
+        RootStorage root = getRsRootStorage();
+        if (root == null) {
+            return counter;
+        }
+        for (ResourceAmount resourceAmount : root.getAll()) {
+            var key = BridgeResources.toAEKey(resourceAmount.resource());
+            if (key != null) {
+                counter.add(key, resourceAmount.amount());
+            }
+        }
+        for (Collection<ResourceAmount> cache : getAllBridgeCachesOnRsNetwork()) {
+            for (ResourceAmount resourceAmount : cache) {
+                var key = BridgeResources.toAEKey(resourceAmount.resource());
+                if (key != null) {
+                    counter.add(key, -resourceAmount.amount());
+                }
+            }
+        }
+        counter.removeZeros();
+        return counter;
+    }
+
+    public com.jakeberryman.meproxy.network.BridgePackets.BridgeStatus buildStatusPayload(boolean openScreen) {
+        var ae2Native = ae2NativeStacks();
+        var rsNative = rsNativeStacks();
+        return new com.jakeberryman.meproxy.network.BridgePackets.BridgeStatus(
+                worldPosition, openScreen, bridgeName,
+                describeAe2Status(), describeRsStatus(),
+                itemsToRs, itemsToAe2, fluidsToRs, fluidsToAe2,
+                rateToRs, rateToAe2,
+                ae2Native.size(), rsNative.size());
+    }
+
+    public List<com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry> queryBreakdown(String query) {
+        var ae2Native = ae2NativeStacks();
+        var rsNative = rsNativeStacks();
+        String needle = query.toLowerCase(java.util.Locale.ROOT).trim();
+
+        java.util.Set<appeng.api.stacks.AEKey> keys = new java.util.HashSet<>(ae2Native.keySet());
+        keys.addAll(rsNative.keySet());
+
+        List<com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry> entries = new ArrayList<>();
+        for (var key : keys) {
+            if (!(key instanceof appeng.api.stacks.AEItemKey itemKey)) {
+                continue;
+            }
+            if (!needle.isEmpty()
+                    && !itemKey.getReadOnlyStack().getHoverName().getString().toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                continue;
+            }
+            entries.add(new com.jakeberryman.meproxy.network.BridgePackets.BreakdownEntry(
+                    itemKey.toStack(1), ae2Native.get(key), rsNative.get(key)));
+        }
+        entries.sort((a, b) -> Long.compare(b.ae2Amount() + b.rsAmount(), a.ae2Amount() + a.rsAmount()));
+        return entries.size() > 50 ? entries.subList(0, 50) : entries;
     }
 
     private void updateRsListener() {
@@ -222,11 +349,21 @@ public class NetworkBridgeBlockEntity extends AbstractBaseNetworkNodeContainerBl
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider provider) {
         super.saveAdditional(tag, provider);
         mainNode.saveToNBT(tag);
+        tag.putString("BridgeName", bridgeName);
+        tag.putLong("ItemsToRs", itemsToRs);
+        tag.putLong("ItemsToAe2", itemsToAe2);
+        tag.putLong("FluidsToRs", fluidsToRs);
+        tag.putLong("FluidsToAe2", fluidsToAe2);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider provider) {
         super.loadAdditional(tag, provider);
         mainNode.loadFromNBT(tag);
+        bridgeName = tag.getString("BridgeName");
+        itemsToRs = tag.getLong("ItemsToRs");
+        itemsToAe2 = tag.getLong("ItemsToAe2");
+        fluidsToRs = tag.getLong("FluidsToRs");
+        fluidsToAe2 = tag.getLong("FluidsToAe2");
     }
 }
